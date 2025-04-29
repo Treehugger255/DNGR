@@ -10,17 +10,23 @@ Author: Apoorva Vinod Gorur
 """
 
 import sys
+import os
+
+os.environ["KERAS_BACKEND"] = "torch"
+
 import numpy as np
 import warnings
 import DNGR_utils as ut
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
-
+import networkx as nx
+import keras
 
 #Stage 1 -  Random Surfing
 @ut.timer("Random_Surfing")
 def random_surf(cosine_sim_matrix, num_hops, alpha):
-    
+
+    # Get number of nodes
     num_nodes = len(cosine_sim_matrix)
     
     adj_matrix = ut.scale_sim_matrix(cosine_sim_matrix)
@@ -60,32 +66,28 @@ def PPMI_matrix(A):
 #Stage 3 - AutoEncoders
 @ut.timer("Generating embeddings with AutoEncoders")
 def sdae(PPMI, hidden_neurons):
-    
-    #local import
-    from keras.layers import Input, Dense, noise
-    from keras.models import Model
 
     #Input layer. Corrupt with Gaussian Noise. 
-    inp = Input(shape=(PPMI.shape[1],))
-    enc = noise.GaussianNoise(0.2)(inp)
+    inp = keras.Input(shape=(PPMI.shape[1],))
+    enc = keras.layers.GaussianNoise(0.2)(inp)
     
     #Encoding layers. Last layer is the bottle neck
     for neurons in hidden_neurons:
-        enc = Dense(neurons, activation = 'relu')(enc)
+        enc = keras.layers.Dense(neurons, activation = 'relu')(enc)
     
     #Decoding layers
-    dec = Dense(hidden_neurons[-2], activation = 'relu')(enc)
+    dec = keras.layers.Dense(hidden_neurons[-2], activation = 'relu')(enc)
     for neurons in hidden_neurons[:-3][::-1]:
-        dec = Dense(neurons, activation = 'relu')(dec)
-    dec = Dense(PPMI.shape[1], activation='relu')(dec)
+        dec = keras.layers.Dense(neurons, activation = 'relu')(dec)
+    dec = keras.layers.Dense(PPMI.shape[1], activation='relu')(dec)
     
     #Train
-    auto_enc = Model(inputs=inp, outputs=dec)
+    auto_enc = keras.Model(inputs=inp, outputs=dec)
     auto_enc.compile(optimizer='adam', loss='mse')
     
     auto_enc.fit(x=PPMI, y=PPMI, batch_size=10, epochs=5)
     
-    encoder = Model(inputs=inp, outputs=enc)
+    encoder = keras.Model(inputs=inp, outputs=enc)
     encoder.compile(optimizer='adam', loss='mse')
     embeddings = encoder.predict(PPMI)
     
@@ -94,8 +96,7 @@ def sdae(PPMI, hidden_neurons):
 
 @ut.timer("the whole process")
 def process(args):
-    
-    group = args.group
+    graph_dir = args.graph_dir
     num_hops = args.hops
     alpha = args.alpha
     hidden_neurons = args.hidden_neurons
@@ -108,28 +109,38 @@ def process(args):
     
     if len(hidden_neurons) < 3:
         sys.exit("DNGR: error: argument --hidden_neurons: Need a minimum of 3 hidden layers")
-    
-    #Read groups
-    text_corpus, file_names, target = ut.read_data(group)
-    
-    #Compute Cosine Similarity Matrix. This acts as Adjacency matrix for the graph.
-    cosine_sim_matrix = ut.get_cosine_sim_matrix(text_corpus)
-    
-    #Stage 1 - Compute Transition Matrix A by random surfing model
-    A = random_surf(cosine_sim_matrix, num_hops, alpha)
-    
-    #Stage 2 - Compute PPMI matrix 
-    PPMI = PPMI_matrix(A)
 
-    #Stage 3 - Generate Embeddings using Auto-Encoder
-    embeddings = sdae(PPMI, hidden_neurons)
+    # TODO: Assumes all graphs are written in .graphml format, which isn't very resilient
+    for file in os.listdir(args.graph_dir):
+        file = os.path.join(graph_dir, file)
+        # If this isn't a valid file, ignore it
+        if not os.path.isfile(file):
+            pass
+        else:
+            graph = (nx.read_graphml(file)).to_undirected()
+            print(graph.number_of_nodes())
 
-    #Evaluation 
-    ut.compute_metrics(embeddings, target)
+            # TODO: A compressed version would be better, this is a bit scary, but it'll probably work
+            adj_matrix = nx.to_numpy_array(graph)
+    
+            #Stage 1 - Compute Transition Matrix A by random surfing model
+            A = random_surf(adj_matrix, num_hops, alpha)
 
-    #Visualize embeddings using t-SNE
-    ut.visualize_TSNE(embeddings, target)
-    plt.show()
+            #Stage 2 - Compute PPMI matrix
+            PPMI = PPMI_matrix(A)
+
+            #Stage 3 - Generate Embeddings using Auto-Encoder
+            embeddings = sdae(PPMI, hidden_neurons)
+
+            print("We have made it to the end!!")
+            print(type(embeddings))
+
+            #Evaluation
+            # ut.compute_metrics(embeddings, target)
+
+            #Visualize embeddings using t-SNE
+            # ut.visualize_TSNE(embeddings, target)
+            # plt.show()
     
     return
 
@@ -138,10 +149,10 @@ def process(args):
 def main():
     
     parser = ArgumentParser('DNGR',description="This is a Keras implementaion of DNGR evaluating the 20NewsGroup dataset.")
-    
-    parser.add_argument('--group', default='NG3', const='NG3', nargs='?',
-                        choices=['NG3','NG6','NG9'], 
-                       help='Choose the group to evaluate')
+
+    parser.add_argument('--graph_dir', type=str,
+                        default="",
+                        help='Path to directory containing dictionary graphs to embed.')
 
     parser.add_argument('--hops', default=2, type=int, 
                        help='Maximum number of hops for Transition Matrix in Random surfing')
