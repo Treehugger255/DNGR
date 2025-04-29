@@ -85,7 +85,7 @@ def get_cosine_sim_matrix(text_corpus):
 
 
 def scale_sim_matrix(mat):
-    #Row-wise sacling of matrix
+    # Row-wise scaling of matrix
     mat = mat - np.diag(np.diag(mat)) #Make diag elements zero
     D_inv = np.diag(np.reciprocal(np.sum(mat,axis=0)))
     mat = np.dot(D_inv, mat)
