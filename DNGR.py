@@ -137,12 +137,12 @@ def process(args):
             # https://stackoverflow.com/questions/10695139/sort-a-list-of-tuples-by-2nd-item-integer-value
             deg = sorted(deg, key=lambda x: x[1], reverse=True)
 
-            os.makedirs("embeddings", exist_ok=True)
+            os.makedirs("embeddings/DNGR", exist_ok=True)
 
             name, _ = os.path.splitext(file)
 
             # Save embeddings to .txt, sorted by degree
-            with open(os.path.join(os.getcwd(), "embeddings", name + ".txt"), 'w') as f:
+            with open(os.path.join(os.getcwd(), "embeddings/DNGR", name + ".txt"), 'w') as f:
                 for v, d in deg:
                     line = graph.nodes[v]["word"] + " " + " ".join(np.vectorize(str)(embeddings[int(v)])) + "\n"
                     f.write(line)
