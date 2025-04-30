@@ -112,13 +112,12 @@ def process(args):
 
     # TODO: Assumes all graphs are written in .graphml format, which isn't very resilient
     for file in os.listdir(args.graph_dir):
-        file = os.path.join(graph_dir, file)
+        file_abs = os.path.join(graph_dir, file)
         # If this isn't a valid file, ignore it
-        if not os.path.isfile(file):
+        if not os.path.isfile(file_abs):
             pass
         else:
-            graph = (nx.read_graphml(file)).to_undirected()
-            print(graph.number_of_nodes())
+            graph = (nx.read_graphml(file_abs)).to_undirected()
 
             # TODO: A compressed version would be better, this is a bit scary, but it'll probably work
             adj_matrix = nx.to_numpy_array(graph)
@@ -132,8 +131,21 @@ def process(args):
             #Stage 3 - Generate Embeddings using Auto-Encoder
             embeddings = sdae(PPMI, hidden_neurons)
 
-            print("We have made it to the end!!")
-            print(type(embeddings))
+            # Stage 4 - Serialize embeddings in .txt format expected by MUSE
+            # Sort nodes by degree
+            deg = list(graph.degree)
+            # https://stackoverflow.com/questions/10695139/sort-a-list-of-tuples-by-2nd-item-integer-value
+            deg = sorted(deg, key=lambda x: x[1], reverse=True)
+
+            os.makedirs("embeddings", exist_ok=True)
+
+            name, _ = os.path.splitext(file)
+
+            # Save embeddings to .txt, sorted by degree
+            with open(os.path.join(os.getcwd(), "embeddings", name + ".txt"), 'w') as f:
+                for v, d in deg:
+                    line = graph.nodes[v]["word"] + " " + " ".join(np.vectorize(str)(embeddings[int(v)])) + "\n"
+                    f.write(line)
 
             #Evaluation
             # ut.compute_metrics(embeddings, target)
