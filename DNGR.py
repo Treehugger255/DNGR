@@ -142,7 +142,7 @@ def process(args):
             name, _ = os.path.splitext(file)
 
             # Save embeddings to .txt, sorted by degree
-            with open(os.path.join(os.getcwd(), "embeddings/DNGR", name + ".txt"), 'w') as f:
+            with open(os.path.join(os.getcwd(), "embeddings/DNGR", name + ".txt"), mode='w', encoding="utf-8") as f:
                 for v, d in deg:
                     line = graph.nodes[v]["word"] + " " + " ".join(np.vectorize(str)(embeddings[int(v)])) + "\n"
                     f.write(line)
